@@ -20,15 +20,16 @@ if ismac
   flags = [flags, {'-D__MACOSX_CORE__'}];
   libs = 'LDFLAGS=\$LDFLAGS -framework CoreAudio -framework CoreMidi -framework CoreFoundation';
 elseif ispc
-  %api = 1; % 1 = DS, 2 = ASIO
+  api = 1; % 1 = DS, 2 = ASIO, 3 = All
   objfile = '*.obj';
   flags = [flags, {['-L' fullfile(matlabroot,'sys','lcc64','lcc64','lib64')], '-lole32'}];
-  %if api == 1
+  if api == 1 || api == 3
     flags = [flags, {'-D__WINDOWS_DS__', '-lwinmm', '-ldsound'}];
-  %elseif api == 2
+  end
+  if api >= 2
     flags = [flags, {'-D__WINDOWS_ASIO__', '-Iasio'}];
     mex( flags{:}, '-c', 'asio/*.cpp' );
-  %end
+  end
 elseif isunix
   flags = [flags, {'-D__LINUX_ALSA__'}];
   libs = 'LDFLAGS=\$LDFLAGS -lasound -lpthread';
