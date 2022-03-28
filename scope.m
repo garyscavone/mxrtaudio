@@ -1,10 +1,16 @@
 % This script implements a simple display of continuous realtime audio
 % input using the RtAudio matlab class.
 %
-% by Gary Scavone, McGill University, June 2020.
+% by Gary Scavone, McGill University, June 2020-2022.
 
 clear all;
-rth = RtAudio();
+apis = RtAudio.getAudioApis(0, 0);
+nApi = 1;
+if length(apis) < nApi
+  disp('!!API specification problem!!');
+  return;
+end
+rth = RtAudio( char(apis(nApi)) );
 rth.listDevices( true );
 
 iDuration = -1.0; % negative value for continuous input
@@ -13,12 +19,14 @@ oChannels = 0;
 iChannels = 2;
 iDevice = 1; % first device = 1 (first valid device meeting requirements)
 oDevice = [];
-info = rth.getAudioDeviceInfo( iDevice, 0, iChannels );
-iDeviceID = info.id;
-if isempty(iDeviceID)
-  disp('!!Device specification problem!!');
+
+% Check that device values are valid
+ids = rth.getAudioDeviceIds( 0, iChannels );
+if length(ids) < iDevice
+  disp('!!Input device specification problem!!');
   return;
 end
+iDeviceID = ids( iDevice );
 
 nGetFrames = 2048; % must be < 0.5 seconds at this sample rate
 nBlocks = 80;      % arbitrary value

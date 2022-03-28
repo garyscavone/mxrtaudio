@@ -13,20 +13,26 @@
 % by Gary P. Scavone, McGill University, 2018-2019.
 
 objfile = 'RtAudio.o';
-flags = {'-Iinclude'};
+flags = {'-g', '-Iinclude'};
 libs = '';
 
 if ismac
-  flags = [flags, {'-D__MACOSX_CORE__'}];
-  libs = 'LDFLAGS=\$LDFLAGS -framework CoreAudio -framework CoreMidi -framework CoreFoundation';
+  api = [1]; % 1 = CoreAudio, 2 = Jack
+  if sum( api == 1 )
+    flags = [flags, {'-D__MACOSX_CORE__'}];
+    libs = 'LDFLAGS=\$LDFLAGS -framework CoreAudio -framework CoreMidi -framework CoreFoundation';
+  end
+  if sum( api == 2 )
+    flags = [flags, {'-D__UNIX_JACK__', '-I/usr/local/include/', '-ljack', '-lpthread'}];
+  end
 elseif ispc
-  api = 1; % 1 = DS, 2 = ASIO, 3 = All
+  api = [1 2]; % 1 = DS, 2 = ASIO
   objfile = '*.obj';
   flags = [flags, {['-L' fullfile(matlabroot,'sys','lcc64','lcc64','lib64')], '-lole32'}];
-  if api == 1 || api == 3
+  if sum( api == 1 )
     flags = [flags, {'-D__WINDOWS_DS__', '-lwinmm', '-ldsound'}];
   end
-  if api >= 2
+  if sum( api == 2 )
     flags = [flags, {'-D__WINDOWS_ASIO__', '-Iasio'}];
     mex( flags{:}, '-c', 'asio/*.cpp' );
   end
@@ -36,7 +42,9 @@ elseif isunix
 end
 
 mex( flags{:}, '-c', 'src/RtAudio.cpp' );
+mex( flags{:}, 'src/mxGetAudioApis.cpp', objfile, libs );
 mex( flags{:}, 'src/mxGetAudioDeviceCount.cpp', objfile, libs );
+mex( flags{:}, 'src/mxGetAudioDeviceIds.cpp', objfile, libs );
 mex( flags{:}, 'src/mxGetAudioDeviceName.cpp', objfile, libs );
 mex( flags{:}, 'src/mxGetAudioDeviceInfo.cpp', objfile, libs );
 mex( flags{:}, 'src/mxControlAudioStream.cpp', objfile, libs );

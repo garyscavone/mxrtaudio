@@ -32,10 +32,10 @@
  *
  *    result = mxControlAudioStream( 'start', oChannels, iChannels, sampleRate,
  *                                   iDuration, oSignal, nRepetitions,
- *                                   oDevice, iDevice, triggerThreshold,
+ *                                   oDeviceId, iDeviceId, triggerThreshold,
  *                                   triggerChannel, triggerTimeout,
  *                                   triggerBackup, oChannelOffset,
- *                                   iChannelOffset, nBufferFrames )
+ *                                   iChannelOffset, nBufferFrames, api )
  *
  *    with parameters:
  *      - oChannels: number of output channels
@@ -44,8 +44,8 @@
  *      - iDuration: input stream time (seconds, negative for continuous input)
  *      - oSignal: output signal vector for output (one row per channel)
  *      - nRepetitions: number of times to repeat oSignal (default = 0)
- *      - oDevice: optional output device index (default = 0)
- *      - iDevice: optional input device index (default = 0)
+ *      - oDeviceId: optional output device ID (default = 0)
+ *      - iDeviceId: optional input device ID (default = 0)
  *      - triggerThreshold: signal value at which a trigger occurs (default = 0)
  *      - triggerChannel: input channel in which to look for trigger 
  *        (default = 0 = first input)
@@ -54,7 +54,8 @@
  *           before recording (default = 0)
  *      - oChannelOffset / iChannelOffset: optional output / input channel
  *           offsets on audio device (default = 0)
- *      - nBufferFrames: # of samples per frame for I/O
+ *      - nBufferFrames: # of samples per frame for I/O (default = 512)
+ *      - api: audio API string name (default = first compiled API found)
  *
  * Calls to this function should be wrapped in a try/catch block (all
  * syntax, parameter or hardware problems are thrown).
@@ -468,6 +469,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
   }
 
   // Restart a stream
+  RtAudioErrorType result;
   if ( !strcmp( "restart", cmd )) {
     if ( !audio ) {
       mexWarnMsgTxt("mxControlAudioStream::restart: no stream is open!");
@@ -478,13 +480,11 @@ void mexFunction( int nlhs, mxArray *plhs[],
       return;
     }
     reset();
-    try {
-      audio->startStream();
-    }
-    catch ( RtAudioError& e ) {
-      std::cout << e.getMessage() << std::endl;
+    result = audio->startStream();
+    if ( result ) {
+      std::string errorText = audio->getErrorText();
       cleanup();
-      mexErrMsgIdAndTxt( "mxControlAudioStream:restart", e.getMessage().c_str());
+      mexErrMsgIdAndTxt( "mxControlAudioStream:restart", errorText.c_str());
     }
     *retval = 0;
     return;
@@ -509,31 +509,32 @@ void mexFunction( int nlhs, mxArray *plhs[],
             "mxControlAudioStream::start: At least four input arguments required." );
   }
 
-  if ( nrhs > 16 ) {
+  if ( nrhs > 17 ) {
     mexErrMsgIdAndTxt( "mxControlAudioStream:start:nrhs",
             "mxControlAudioStream::start: Too many input arguments." );
   }
   
-// Make sure all input arguments are scalars (other than 'oSignal')
+// Make sure all input arguments are scalars (other than 'oSignal', 'iDuration' and 'api')
   for ( int n=1; n<nrhs; n++ ) {
     if ( n == 4 ) continue;
     if ( n == 5 ) continue;
+    if ( n == 16 ) continue;
     if ( !mxIsDouble( prhs[n] ) ||
             mxGetScalar( prhs[n] ) < 0 ||
             mxIsComplex(prhs[n]) ||
             mxGetNumberOfElements(prhs[n]) != 1 ) {
       *retval = 1;
       mexErrMsgIdAndTxt( "mxControlAudioStream:start:notScalar",
-              "mxControlAudioStream:start: Input arguments (except iDuration and oSignal) must be positive scalars.");
+              "mxControlAudioStream:start: Input arguments (except iDuration, oSignal and api) must be positive scalars.");
     }
   }
 
 //    result = mxControlAudioStream( 'start', oChannels, iChannels, sampleRate,
 //                                    iDuration, oSignal, nRepetitions,
-//                                    oDevice, iDevice, triggerThreshold,
+//                                    oDeviceId, iDeviceId, triggerThreshold,
 //                                    triggerChannel, triggerTimeout,
 //                                    triggerBackup, oChannelOffset,
-//                                    iChannelOffset, nBufferFrames )
+//                                    iChannelOffset, nBufferFrames, api )
 
 
   int oChannels = mxGetScalar( prhs[1] );
@@ -541,8 +542,8 @@ void mexFunction( int nlhs, mxArray *plhs[],
   int sampleRate = mxGetScalar( prhs[3] );
   double iDuration = mxGetScalar( prhs[4] );
   int nRepetitions = 0;
-  int oDevice = 0;
-  int iDevice = 0;
+  int oDeviceId = 0;
+  int iDeviceId = 0;
   double triggerThreshold = 0.0;
   int triggerChannel = 0;
   int triggerTimeout = 5;
@@ -551,8 +552,8 @@ void mexFunction( int nlhs, mxArray *plhs[],
   int iChannelOffset = 0;
   unsigned int bufferFrames = 512;
   if ( nrhs > 6 && oChannels ) nRepetitions = mxGetScalar( prhs[6] );
-  if ( nrhs > 7 ) oDevice = mxGetScalar( prhs[7] );
-  if ( nrhs > 8 ) iDevice = mxGetScalar( prhs[8] );
+  if ( nrhs > 7 ) oDeviceId = mxGetScalar( prhs[7] );
+  if ( nrhs > 8 ) iDeviceId = mxGetScalar( prhs[8] );
   if ( nrhs > 9 ) triggerThreshold = mxGetScalar( prhs[9] );
   if ( nrhs > 10 ) triggerChannel = mxGetScalar( prhs[10] );
   if ( nrhs > 11 ) triggerTimeout = mxGetScalar( prhs[11] );
@@ -560,7 +561,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
   if ( nrhs > 13 ) oChannelOffset = mxGetScalar( prhs[13] );
   if ( nrhs > 14 ) iChannelOffset = mxGetScalar( prhs[14] );
   if ( nrhs > 15 ) bufferFrames = mxGetScalar( prhs[15] );
-  
+  // If the API is specified, make sure it is a string.
+  if ( nrhs > 16 && ( !mxIsChar( prhs[16] ) || mxGetM( prhs[16]) != 1 ) )
+    mexErrMsgIdAndTxt( "mxControlAudioStream:start:apiNotString",
+                       "The API input argument must be a string." );
   if ( iChannels > 0 && triggerChannel >= iChannels )
     mexErrMsgIdAndTxt( "mxControlAudioStream:start:triggerChannel",
             "mxControlAudioStream::start: trigger channel is greater than number of input channels!");
@@ -573,6 +577,19 @@ void mexFunction( int nlhs, mxArray *plhs[],
   if ( triggerBackup > bufferFrames )
     mexErrMsgIdAndTxt( "mxControlAudioStream:start:triggerBackup",
             "mxControlAudioStream::start: trigger backup must be less <= bufferFrames." );
+
+  RtAudio::Api apiVal = RtAudio::UNSPECIFIED;
+  if ( nrhs > 16 ) {
+    char api[20];
+    int status = mxGetString( prhs[16], api, sizeof(api) );
+    if ( status != 0 )
+      mexErrMsgIdAndTxt( "mxControlAudioStream:start:mxGetString",
+                         "Failed to copy input string into memory." );
+    apiVal = RtAudio::getCompiledApiByDisplayName( std::string( api ) );
+    if ( apiVal == RtAudio::UNSPECIFIED )
+      mexErrMsgIdAndTxt( "mxControlAudioStream:start:apiNotFound",
+                         "The specified API is not found." );
+  }
   
   double *data = 0;
   unsigned long oFrames = 0;
@@ -596,15 +613,15 @@ void mexFunction( int nlhs, mxArray *plhs[],
 
   // Set the stream information
   RtAudio::StreamParameters iParams, oParams;
-  iParams.deviceId = iDevice;
+  iParams.deviceId = iDeviceId;
   iParams.nChannels = iChannels;
-  oParams.deviceId = oDevice;
+  oParams.deviceId = oDeviceId;
   oParams.nChannels = oChannels;
   oParams.firstChannel = oChannelOffset;
   iParams.firstChannel = iChannelOffset;
 
   mexLock();
-  audio = new RtAudio();
+  audio = new RtAudio( apiVal );
   
   // We'll let RtAudio do the parameter checking and print warnings.
   audio->showWarnings( true );
@@ -629,21 +646,19 @@ void mexFunction( int nlhs, mxArray *plhs[],
     tickData->triggerFlag = false;
   
   // Try to open the realtime hardware
-  try {
-    if ( oChannels == 0 ) // input only
-      audio->openStream( NULL, &iParams, RTAUDIO_FLOAT64,
-              sampleRate, &bufferFrames, &tick, (void *)tickData );
-    else if ( iChannels == 0 ) // output only
-      audio->openStream( &oParams, NULL, RTAUDIO_FLOAT64,
-              sampleRate, &bufferFrames, &tick, (void *)tickData );
-    else // duplex
-      audio->openStream( &oParams, &iParams, RTAUDIO_FLOAT64,
-              sampleRate, &bufferFrames, &tick, (void *)tickData );
-  }
-  catch ( RtAudioError& e ) {
-    std::cout << e.getMessage() << std::endl;
+  if ( oChannels == 0 ) // input only
+    result = audio->openStream( NULL, &iParams, RTAUDIO_FLOAT64,
+                                sampleRate, &bufferFrames, &tick, (void *)tickData );
+  else if ( iChannels == 0 ) // output only
+    result = audio->openStream( &oParams, NULL, RTAUDIO_FLOAT64,
+                                sampleRate, &bufferFrames, &tick, (void *)tickData );
+  else // duplex
+    result = audio->openStream( &oParams, &iParams, RTAUDIO_FLOAT64,
+                               sampleRate, &bufferFrames, &tick, (void *)tickData );
+  if ( result > 0 ) {
+    std::string errorText = audio->getErrorText();
     cleanup();
-    mexErrMsgIdAndTxt( "mxControlAudioStream:start", e.getMessage().c_str());
+    mexErrMsgIdAndTxt( "mxControlAudioStream:start", errorText.c_str());
   }
   
   if ( iChannels > 0 ) {
@@ -665,13 +680,11 @@ void mexFunction( int nlhs, mxArray *plhs[],
     }
   }
   
-  try {
-    audio->startStream();
-  }
-  catch ( RtAudioError& e ) {
-    std::cout << e.getMessage() << std::endl;
+  result = audio->startStream();
+  if ( result ) {
+    std::string errorText = audio->getErrorText();
     cleanup();
-    mexErrMsgIdAndTxt( "mxControlAudioStream:start", e.getMessage().c_str());
+    mexErrMsgIdAndTxt( "mxControlAudioStream:start", errorText.c_str());
   }
 
   *retval = 0;

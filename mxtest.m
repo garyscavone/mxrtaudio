@@ -1,9 +1,15 @@
 % Test script using the RtAudio matlab class.
 %
-% by Gary Scavone, McGill University, 2018-2020.
+% by Gary Scavone, McGill University, 2018-2022.
 
 clear all;
-rth = RtAudio();
+apis = RtAudio.getAudioApis(0, 0);
+nApi = 1;
+if length(apis) < nApi
+  disp('!!API specification problem!!');
+  return;
+end
+rth = RtAudio( char(apis(nApi)) );
 rth.listDevices( true );
 
 % Basic stream settings
@@ -13,18 +19,22 @@ iChannels = 2;
 oDuration = 2.0;  % seconds (may change depending on other parameters)
 nRepetitions = 2; % repetitions of the output signal (after first time)
 iDuration = 4.0;
-iDevice = 1; % first device = 1 (first valid device meeting requirements)
-oDevice = 2; % first device = 1 (first valid device meeting requirements)
+iDevice = 1; % first device = 1 (valid devices meeting requirements)
+oDevice = 2; % first device = 1 (valid devices meeting requirements)
 
 % Check that device values are valid
-info = rth.getAudioDeviceInfo( iDevice, 0, iChannels );
-iDeviceID = info.id;
-info = rth.getAudioDeviceInfo( oDevice, oChannels, 0 );
-oDeviceID = info.id;
-if isempty(iDeviceID) || isempty(oDeviceID)
-  disp('!!Device specification problem!!');
+ids = rth.getAudioDeviceIds( 0, iChannels );
+if length(ids) < iDevice
+  disp('!!Input device specification problem!!');
   return;
 end
+iDeviceID = ids( iDevice );
+ids = rth.getAudioDeviceIds( oChannels, 0 );
+if length(ids) < oDevice
+  disp('!!Output device specification problem!!');
+  return;
+end
+oDeviceID = ids( oDevice );
 
 % Trigger settings (when iChannels > 0)
 triggerThreshold = 0.0; % if this > 0, plotting will be blocked until trigger

@@ -5,25 +5,48 @@ classdef RtAudio < handle
 % support using RtAudio. RtAudio functionality is provided via underlying
 % MEX functions.
 %
-% Gary Scavone, McGill University, 2018-2020.
+% Gary Scavone, McGill University, 2018-2022.
 
   properties (SetObservable)
     isValid = false;
     streamIsOpen = 0;
-    version = 1.0;
+    version = 1.1;
+    api_ = '';
+  end
+  
+  methods(Static)
+
+    %-----------------------------------------------------------
+    function apis = getAudioApis( nOutputs, nInputs )
+      apis = mxGetAudioApis( nOutputs, nInputs, 0 );
+    end
+
   end
   
   methods
   
     %-----------------------------------------------------------
-    function obj = RtAudio()
+    function obj = RtAudio( api )
       if exist( 'mxGetAudioDeviceCount', 'file' ) ...
           && exist( 'mxGetAudioDeviceName', 'file' ) ...
           && exist( 'mxGetAudioDeviceInfo', 'file' ) ...
+          && exist( 'mxGetAudioDeviceIds', 'file' ) ...
           && exist( 'mxControlAudioStream', 'file' )
         obj.isValid = true;
       else
         error( 'RtAudio: Some or all mex functions not found!' );
+      end
+      if nargin > 0
+        if ischar( api )
+          apis = obj.getAudioApis(0, 0);
+          if any( strcmp( apis, api ))
+            obj.api_ = api;
+          else
+            error( 'RtAudio: Api input argument is invalid!' );
+          end
+        else
+          error( 'RtAudio: Api input argument must be a string!' );
+        end
       end
     end
     
@@ -38,23 +61,24 @@ classdef RtAudio < handle
       
       
     %-----------------------------------------------------------
-    function list = listDevices( obj, show )
+    function list = listDevices( obj, show, api )
       if nargin < 2, show = false; end
-      nInputs = obj.getAudioDeviceCount( 0, 1 );
-      nOutputs = obj.getAudioDeviceCount( 1, 0 );
+      if nargin < 3, api = obj.api_; end
+      inputIds = obj.getAudioDeviceIds( 0, 1, api );
+      outputIds = obj.getAudioDeviceIds( 1, 0, api );
       list = '';
-      for n = 1:nOutputs
+      for n = 1:length( outputIds )
         if n == 1
           list = sprintf( 'Output Devices: \n' );
         end
-        name = sprintf( '\t%d: %s\n', n, obj.getAudioDeviceName( n, 1, 0 ) );
+        name = sprintf( '\t%d: %s\n', n, obj.getAudioDeviceName( outputIds( n ) ) );
         list = [list name]; %#ok<*AGROW>
       end
-      for n = 1:nInputs
+      for n = 1:length( inputIds )
         if n == 1
           list = [list sprintf( 'Input Devices: \n' ) ];
         end
-        name = sprintf( '\t%d: %s\n', n, obj.getAudioDeviceName( n, 0, 1 ) );
+        name = sprintf( '\t%d: %s\n', n, obj.getAudioDeviceName( inputIds( n ) ) );
         list = [list name];
       end
       if show
@@ -64,35 +88,50 @@ classdef RtAudio < handle
 
 
     %-----------------------------------------------------------
-    function count = getAudioDeviceCount(~, nOutputs, nInputs)
+    function count = getAudioDeviceCount( obj, nOutputs, nInputs, api )
+      if nargin < 4, api = obj.api_; end
       count = 0;
       try
-        count = mxGetAudioDeviceCount(nOutputs, nInputs, 0);
+        count = mxGetAudioDeviceCount( nOutputs, nInputs, 0, api );
       catch
-        error('RtAudio.m: error calling getAudioDeviceCount.');
+        error('RtAudio.m: error calling mxGetAudioDeviceCount.');
       end
     end
     
     
     %-----------------------------------------------------------
-    function name = getAudioDeviceName(~, iDevice, nOutputs, nInputs)
+    function ids = getAudioDeviceIds( obj, nOutputs, nInputs, api )
+      if nargin < 4, api = obj.api_; end
+      ids = [];
+      try
+        ids = mxGetAudioDeviceIds( nOutputs, nInputs, 0, api );
+      catch
+        error('RtAudio.m: error calling mxGetAudioDeviceIds.');
+      end
+    end
+    
+
+    %-----------------------------------------------------------
+    function name = getAudioDeviceName( obj, deviceId, api )
+      if nargin < 3, api = obj.api_; end
       name = '';
       try
-        name = mxGetAudioDeviceName(iDevice, nOutputs, nInputs, 0);
+        name = mxGetAudioDeviceName( deviceId, api );
       catch
-        error('RtAudio.m: error calling getAudioDeviceName.');
+        error('RtAudio.m: error calling mxGetAudioDeviceName.');
       end
     end
 
     
     %-----------------------------------------------------------
-    function info = getAudioDeviceInfo(~, iDevice, nOutputs, nInputs)
-      info = struct( 'name', [], 'id', [], 'outputChannels', [], ...
+    function info = getAudioDeviceInfo( obj, deviceId, api )
+      if nargin < 3, api = obj.api_; end
+      info = struct( 'name', [], 'outputChannels', [], ...
         'inputChannels', [], 'duplexChannels', [], 'sampleRates', [] );
       try
-        info = mxGetAudioDeviceInfo(iDevice, nOutputs, nInputs, 0);
+        info = mxGetAudioDeviceInfo( deviceId, api );
       catch
-        error('RtAudio.m: error calling getAudioDeviceInfo.');
+        error('RtAudio.m: error calling mxGetAudioDeviceInfo.');
       end
     end
     
@@ -102,7 +141,7 @@ classdef RtAudio < handle
                               iDuration, oSignal, nRepetitions, ...
                               oDevice, iDevice, triggerThreshold, ...
                               triggerChannel, triggerTimeout, triggerBackup, ...
-                              oChannelOffset, iChannelOffset, nBufferFrames)
+                              oChannelOffset, iChannelOffset, nBufferFrames, api)
       if obj.streamIsOpen
         warning('RtAudio::startAudioStream: a stream is already open!');
         return;
@@ -118,6 +157,7 @@ classdef RtAudio < handle
       if nargin < 14, oChannelOffset = 0; end
       if nargin < 15, iChannelOffset = 0; end
       if nargin < 16, nBufferFrames = 512; end
+      if nargin < 17, api = obj.api_; end
 
       [ochans, ~] = size( oSignal );
       if ochans ~= oChannels
@@ -130,7 +170,7 @@ classdef RtAudio < handle
           iDuration, oSignal, nRepetitions, ...
           oDevice, iDevice, triggerThreshold, ...
           triggerChannel, triggerTimeout, triggerBackup, ...
-          oChannelOffset, iChannelOffset, nBufferFrames );
+          oChannelOffset, iChannelOffset, nBufferFrames, api );
       catch ME
         error(['RtAudio.m: error calling startAudioStream. ', ME.message]);
       end
