@@ -49,8 +49,8 @@ void mexFunction( int nlhs, mxArray *plhs[],
   if ( nOutputs > 0 || nInputs > 0 || nDuplex > 0 ) {
     for ( unsigned int n=0; n<apis.size(); n++ ) {
       audio = new RtAudio( apis[n] );
+      audio->showWarnings( false );
       std::vector<unsigned int> ids = audio->getDeviceIds();
-
       for ( unsigned int m=0; m<ids.size(); m++ ) {
         RtAudio::DeviceInfo info = audio->getDeviceInfo( ids[m] );
         if ( info.outputChannels >= nOutputs && info.inputChannels >= nInputs &&

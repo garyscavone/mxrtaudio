@@ -70,6 +70,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
   }
 
   RtAudio audio( apiVal );
+  audio.showWarnings( false );
   RtAudio::DeviceInfo info;
   std::vector<unsigned int> ids = audio.getDeviceIds();
   unsigned int count = 0;

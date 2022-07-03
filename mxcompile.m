@@ -10,14 +10,14 @@
 % Studio. If there is a problem compiling in Windows, it is most likely
 % related to the path to the ole32, winmm, and dsound libraries.
 %
-% by Gary P. Scavone, McGill University, 2018-2019.
+% by Gary P. Scavone, McGill University, 2018-2022.
 
 objfile = 'RtAudio.o';
 flags = {'-g', '-Iinclude'};
 libs = '';
 
 if ismac
-  api = [1]; % 1 = CoreAudio, 2 = Jack
+  api = [1 2]; % 1 = CoreAudio, 2 = Jack
   if sum( api == 1 )
     flags = [flags, {'-D__MACOSX_CORE__'}];
     libs = 'LDFLAGS=\$LDFLAGS -framework CoreAudio -framework CoreMidi -framework CoreFoundation';
