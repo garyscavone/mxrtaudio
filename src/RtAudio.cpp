@@ -92,6 +92,320 @@ const unsigned int RtApi::SAMPLE_RATES[] = {
 
 // *************************************************** //
 //
+// RtApi subclass prototypes.
+//
+// *************************************************** //
+
+#if defined(__MACOSX_CORE__)
+
+#include <CoreAudio/AudioHardware.h>
+
+class RtApiCore: public RtApi
+{
+public:
+
+  RtApiCore();
+  ~RtApiCore();
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::MACOSX_CORE; }
+  unsigned int getDefaultOutputDevice( void ) override;
+  unsigned int getDefaultInputDevice( void ) override;
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by an internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  bool callbackEvent( AudioDeviceID deviceId,
+                      const AudioBufferList *inBufferList,
+                      const AudioBufferList *outBufferList );
+
+ private:
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( AudioDeviceID id, RtAudio::DeviceInfo &info );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+  static const char* getErrorCode( OSStatus code );
+  std::vector< AudioDeviceID > deviceIds_;
+};
+
+#endif
+
+#if defined(__UNIX_JACK__)
+
+#include <jack/jack.h>
+
+class RtApiJack: public RtApi
+{
+public:
+
+  RtApiJack();
+  ~RtApiJack();
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::UNIX_JACK; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  bool callbackEvent( unsigned long nframes );
+
+  private:
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info, jack_client_t *client );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+
+  bool shouldAutoconnect_;
+};
+
+#endif
+
+#if defined(__WINDOWS_ASIO__)
+
+class RtApiAsio: public RtApi
+{
+public:
+
+  RtApiAsio();
+  ~RtApiAsio();
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::WINDOWS_ASIO; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  bool callbackEvent( long bufferIndex );
+
+  private:
+
+  bool coInitialized_;
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info );
+  bool probeDeviceOpen( unsigned int device, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+};
+
+#endif
+
+#if defined(__WINDOWS_DS__)
+
+class RtApiDs: public RtApi
+{
+public:
+
+  RtApiDs();
+  ~RtApiDs();
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::WINDOWS_DS; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  void callbackEvent( void );
+
+  private:
+  
+  bool coInitialized_;
+  bool buffersRolling;
+  long duplexPrerollBytes;
+  std::vector<struct DsDevice> dsDevices_;
+  
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info, DsDevice &dsDevice );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+};
+
+#endif
+
+#if defined(__WINDOWS_WASAPI__)
+
+struct IMMDeviceEnumerator;
+
+class RtApiWasapi : public RtApi
+{
+public:
+  RtApiWasapi();
+  virtual ~RtApiWasapi();
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::WINDOWS_WASAPI; }
+  unsigned int getDefaultOutputDevice( void ) override;
+  unsigned int getDefaultInputDevice( void ) override;
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+private:
+  bool coInitialized_;
+  IMMDeviceEnumerator* deviceEnumerator_;
+  std::vector< std::pair< std::string, bool> > deviceIds_;
+
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info, LPWSTR deviceId, bool isCaptureDevice );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels,
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int* bufferSize,
+                        RtAudio::StreamOptions* options ) override;
+
+  static DWORD WINAPI runWasapiThread( void* wasapiPtr );
+  static DWORD WINAPI stopWasapiThread( void* wasapiPtr );
+  static DWORD WINAPI abortWasapiThread( void* wasapiPtr );
+  void wasapiThread();
+};
+
+#endif
+
+#if defined(__LINUX_ALSA__)
+
+class RtApiAlsa: public RtApi
+{
+public:
+
+  RtApiAlsa();
+  ~RtApiAlsa();
+  RtAudio::Api getCurrentApi() override { return RtAudio::LINUX_ALSA; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  void callbackEvent( void );
+
+  private:
+  std::vector< std::string > deviceIds_;
+  
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info, std::string name );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+};
+
+#endif
+
+#if defined(__LINUX_PULSE__)
+
+#include <pulse/pulseaudio.h>
+
+class RtApiPulse: public RtApi
+{
+public:
+  ~RtApiPulse();
+  RtAudio::Api getCurrentApi() override { return RtAudio::LINUX_PULSE; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  void callbackEvent( void );
+
+  struct PaDeviceInfo {
+    std::string sinkName;
+    std::string sourceName;
+  };
+
+ private:
+  std::vector< PaDeviceInfo > paDeviceList_;
+
+  void probeDevices( void ) override;
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels,
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+};
+
+#endif
+
+#if defined(__LINUX_OSS__)
+
+#include <sys/soundcard.h>
+
+class RtApiOss: public RtApi
+{
+public:
+
+  RtApiOss();
+  ~RtApiOss();
+  RtAudio::Api getCurrentApi() override { return RtAudio::LINUX_OSS; }
+  void closeStream( void ) override;
+  RtAudioErrorType startStream( void ) override;
+  RtAudioErrorType stopStream( void ) override;
+  RtAudioErrorType abortStream( void ) override;
+
+  // This function is intended for internal use only.  It must be
+  // public because it is called by the internal callback handler,
+  // which is not a member of RtAudio.  External use of this function
+  // will most likely produce highly undesirable results!
+  void callbackEvent( void );
+
+  private:
+
+  void probeDevices( void ) override;
+  bool probeDeviceInfo( RtAudio::DeviceInfo &info, oss_audioinfo &ainfo );
+  bool probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsigned int channels, 
+                        unsigned int firstChannel, unsigned int sampleRate,
+                        RtAudioFormat format, unsigned int *bufferSize,
+                        RtAudio::StreamOptions *options ) override;
+};
+
+#endif
+
+#if defined(__RTAUDIO_DUMMY__)
+
+class RtApiDummy: public RtApi
+{
+public:
+
+  RtApiDummy() { errorText_ = "RtApiDummy: This class provides no functionality."; error( RTAUDIO_WARNING ); }
+  RtAudio::Api getCurrentApi( void ) override { return RtAudio::RTAUDIO_DUMMY; }
+  void closeStream( void ) override {}
+  RtAudioErrorType startStream( void ) override { return RTAUDIO_NO_ERROR; }
+  RtAudioErrorType stopStream( void ) override { return RTAUDIO_NO_ERROR; }
+  RtAudioErrorType abortStream( void ) override { return RTAUDIO_NO_ERROR; }
+
+  private:
+
+  bool probeDeviceOpen( unsigned int /*deviceId*/, StreamMode /*mode*/, unsigned int /*channels*/, 
+                        unsigned int /*firstChannel*/, unsigned int /*sampleRate*/,
+                        RtAudioFormat /*format*/, unsigned int * /*bufferSize*/,
+                        RtAudio::StreamOptions * /*options*/ ) override { return false; }
+};
+
+#endif
+
+// *************************************************** //
+//
 // RtAudio definitions.
 //
 // *************************************************** //
@@ -371,7 +685,9 @@ RtAudioErrorType RtApi :: openStream( RtAudio::StreamParameters *oParams,
     return error( RTAUDIO_INVALID_PARAMETER );
   }
 
-  probeDevices();
+  // Scan devices if none currently listed.
+  if ( deviceList_.size() == 0 ) probeDevices();
+  
   unsigned int m, oChannels = 0;
   if ( oParams ) {
     oChannels = oParams->nChannels;
@@ -400,6 +716,7 @@ RtAudioErrorType RtApi :: openStream( RtAudio::StreamParameters *oParams,
   bool result;
 
   if ( oChannels > 0 ) {
+
     result = probeDeviceOpen( oParams->deviceId, OUTPUT, oChannels, oParams->firstChannel,
                               sampleRate, format, bufferFrames, options );
     if ( result == false )
@@ -659,6 +976,12 @@ struct CoreHandle {
     :deviceBuffer(0), drainCounter(0), internalDrain(false) { nStreams[0] = 1; nStreams[1] = 1; id[0] = 0; id[1] = 0; procId[0] = 0; procId[1] = 0; xrun[0] = false; xrun[1] = false; xrunListenerAdded[0] = false; xrunListenerAdded[1] = false; disconnectListenerAdded[0] = false; disconnectListenerAdded[1] = false; }
 };
 
+#if defined( MAC_OS_VERSION_12_0 ) && ( MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_12_0 )
+  #define KAUDIOOBJECTPROPERTYELEMENT kAudioObjectPropertyElementMain
+#else
+  #define KAUDIOOBJECTPROPERTYELEMENT kAudioObjectPropertyElementMaster // deprecated with macOS 12
+#endif
+
 RtApiCore:: RtApiCore()
 {
 #if defined( AVAILABLE_MAC_OS_X_VERSION_10_6_AND_LATER )
@@ -669,7 +992,7 @@ RtApiCore:: RtApiCore()
   CFRunLoopRef theRunLoop = NULL;
   AudioObjectPropertyAddress property = { kAudioHardwarePropertyRunLoop,
                                           kAudioObjectPropertyScopeGlobal,
-                                          kAudioObjectPropertyElementMaster };
+                                          KAUDIOOBJECTPROPERTYELEMENT };
   OSStatus result = AudioObjectSetPropertyData( kAudioObjectSystemObject, &property, 0, NULL, sizeof(CFRunLoopRef), &theRunLoop);
   if ( result != noErr ) {
     errorText_ = "RtApiCore::RtApiCore: error setting run loop property!";
@@ -690,7 +1013,7 @@ unsigned int RtApiCore :: getDefaultOutputDevice( void )
 {
   AudioDeviceID id;
   UInt32 dataSize = sizeof( AudioDeviceID );
-  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
+  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, KAUDIOOBJECTPROPERTYELEMENT };
   OSStatus result = AudioObjectGetPropertyData( kAudioObjectSystemObject, &property, 0, NULL, &dataSize, &id );
   if ( result != noErr ) {
     errorText_ = "RtApiCore::getDefaultOutputDevice: OS-X system error getting device.";
@@ -724,7 +1047,7 @@ unsigned int RtApiCore :: getDefaultInputDevice( void )
 {
   AudioDeviceID id;
   UInt32 dataSize = sizeof( AudioDeviceID );
-  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
+  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, KAUDIOOBJECTPROPERTYELEMENT };
   OSStatus result = AudioObjectGetPropertyData( kAudioObjectSystemObject, &property, 0, NULL, &dataSize, &id );
   if ( result != noErr ) {
     errorText_ = "RtApiCore::getDefaultInputDevice: OS-X system error getting device.";
@@ -779,7 +1102,7 @@ void RtApiCore :: probeDevices( void )
   
   // Find out how many audio devices there are.
   UInt32 dataSize;
-  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
+  AudioObjectPropertyAddress property = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, KAUDIOOBJECTPROPERTYELEMENT };
   OSStatus result = AudioObjectGetPropertyDataSize( kAudioObjectSystemObject, &property, 0, NULL, &dataSize );
   if ( result != noErr ) {
     errorText_ = "RtApiCore::probeDevices: OS-X system error getting device info!";
@@ -875,7 +1198,7 @@ bool RtApiCore :: probeDeviceInfo( AudioDeviceID id, RtAudio::DeviceInfo& info )
   UInt32 dataSize = sizeof( CFStringRef );
   AudioObjectPropertyAddress property = { kAudioObjectPropertyManufacturer,
                                           kAudioObjectPropertyScopeGlobal,
-                                          kAudioObjectPropertyElementMaster };
+                                          KAUDIOOBJECTPROPERTYELEMENT };
   OSStatus result = AudioObjectGetPropertyData( id, &property, 0, NULL, &dataSize, &cfname );
   if ( result != noErr ) {
     errorStream_ << "RtApiCore::probeDeviceInfo: system error (" << getErrorCode( result ) << ") getting device manufacturer.";
@@ -1131,7 +1454,7 @@ bool RtApiCore :: probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsig
 
   AudioObjectPropertyAddress property = { kAudioHardwarePropertyDevices,
                                           kAudioDevicePropertyScopeOutput,
-                                          kAudioObjectPropertyElementMaster };
+                                          KAUDIOOBJECTPROPERTYELEMENT };
 
   // Setup for stream mode.
   bool isInput = false;
@@ -1615,8 +1938,7 @@ void RtApiCore :: closeStream( void )
     if ( handle ) {
       AudioObjectPropertyAddress property = { kAudioHardwarePropertyDevices,
                                               kAudioObjectPropertyScopeGlobal,
-                                              kAudioObjectPropertyElementMaster };
-
+                                              KAUDIOOBJECTPROPERTYELEMENT };
       if ( handle->xrunListenerAdded[0] ) {
         property.mSelector = kAudioDeviceProcessorOverload;
         if (AudioObjectRemovePropertyListener( handle->id[0], &property, xrunListener, (void *) handle ) != noErr) {
@@ -1650,7 +1972,7 @@ void RtApiCore :: closeStream( void )
     if ( handle ) {
       AudioObjectPropertyAddress property = { kAudioHardwarePropertyDevices,
         kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMaster };
+        KAUDIOOBJECTPROPERTYELEMENT };
 
       if ( handle->xrunListenerAdded[1] ) {
         property.mSelector = kAudioDeviceProcessorOverload;
@@ -2213,6 +2535,20 @@ struct JackHandle {
     :client(0), drainCounter(0), internalDrain(false) { ports[0] = 0; ports[1] = 0; xrun[0] = false; xrun[1] = false; }
 };
 
+std::string escapeJackPortRegex(std::string &str)
+{
+  const std::string need_escaping = "()[]{}*+?$^.|\\";
+  std::string escaped_string;
+  for (auto c : str)
+  {
+    if (need_escaping.find(c) !=  std::string::npos)
+      escaped_string.push_back('\\');
+
+    escaped_string.push_back(c);
+  }
+  return escaped_string;
+}
+
 #if !defined(__RTAUDIO_DEBUG__)
 static void jackSilentError( const char * ) {};
 #endif
@@ -2328,7 +2664,7 @@ bool RtApiJack :: probeDeviceInfo( RtAudio::DeviceInfo& info, jack_client_t *cli
   // Count the available ports containing the client name as device
   // channels.  Jack "input ports" equal RtAudio output channels.
   unsigned int nChannels = 0;
-  const char **ports = jack_get_ports( client, info.name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput );
+  const char **ports = jack_get_ports( client, escapeJackPortRegex(info.name).c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput );
   if ( ports ) {
     while ( ports[ nChannels ] ) nChannels++;
     free( ports );
@@ -2337,7 +2673,7 @@ bool RtApiJack :: probeDeviceInfo( RtAudio::DeviceInfo& info, jack_client_t *cli
 
   // Jack "output ports" equal RtAudio input channels.
   nChannels = 0;
-  ports = jack_get_ports( client, info.name.c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput );
+  ports = jack_get_ports( client, escapeJackPortRegex(info.name).c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput );
   if ( ports ) {
     while ( ports[ nChannels ] ) nChannels++;
     free( ports );
@@ -2467,7 +2803,7 @@ bool RtApiJack :: probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsig
     // Count the available ports containing the client name as device
     // channels.  Jack "input ports" equal RtAudio output channels.
     unsigned int nChannels = 0;
-    ports = jack_get_ports( client, deviceName.c_str(), JACK_DEFAULT_AUDIO_TYPE, flag );
+    ports = jack_get_ports( client, escapeJackPortRegex(deviceName).c_str(), JACK_DEFAULT_AUDIO_TYPE, flag );
     if ( ports ) {
       while ( ports[ nChannels ] ) nChannels++;
       free( ports );
@@ -2491,7 +2827,7 @@ bool RtApiJack :: probeDeviceOpen( unsigned int deviceId, StreamMode mode, unsig
   stream_.sampleRate = jackRate;
 
   // Get the latency of the JACK port.
-  ports = jack_get_ports( client, deviceName.c_str(), JACK_DEFAULT_AUDIO_TYPE, flag );
+  ports = jack_get_ports( client, escapeJackPortRegex(deviceName).c_str(), JACK_DEFAULT_AUDIO_TYPE, flag );
   if ( ports[ firstChannel ] ) {
     // Added by Ge Wang
     jack_latency_callback_mode_t cbmode = (mode == INPUT ? JackCaptureLatency : JackPlaybackLatency);
@@ -2739,7 +3075,7 @@ RtAudioErrorType RtApiJack :: startStream( void )
 
   // Get the list of available ports.
   if ( shouldAutoconnect_ && (stream_.mode == OUTPUT || stream_.mode == DUPLEX) ) {
-    ports = jack_get_ports( handle->client, handle->deviceName[0].c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
+    ports = jack_get_ports( handle->client, escapeJackPortRegex(handle->deviceName[0]).c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput);
     if ( ports == NULL) {
       errorText_ = "RtApiJack::startStream(): error determining available JACK input ports!";
       goto unlock;
@@ -2762,7 +3098,7 @@ RtAudioErrorType RtApiJack :: startStream( void )
   }
 
   if ( shouldAutoconnect_ && (stream_.mode == INPUT || stream_.mode == DUPLEX) ) {
-    ports = jack_get_ports( handle->client, handle->deviceName[1].c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput );
+    ports = jack_get_ports( handle->client, escapeJackPortRegex(handle->deviceName[1]).c_str(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput );
     if ( ports == NULL) {
       errorText_ = "RtApiJack::startStream(): error determining available JACK output ports!";
       goto unlock;
@@ -4763,7 +5099,7 @@ bool RtApiWasapi::probeDeviceInfo( RtAudio::DeviceInfo &info, LPWSTR deviceId, b
   PropVariantInit( &deviceNameProp );
 
   hr = devicePropStore->GetValue( PKEY_Device_FriendlyName, &deviceNameProp );
-  if ( FAILED( hr ) ) {
+  if ( FAILED( hr ) || deviceNameProp.pwszVal == nullptr ) {
     errorText_ = "RtApiWasapi::probeDeviceInfo: Unable to retrieve device property: PKEY_Device_FriendlyName.";
     goto Exit;
   }
