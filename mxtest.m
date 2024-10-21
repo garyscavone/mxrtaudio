@@ -1,40 +1,78 @@
-r% Test script using the RtAudio matlab class.
+% Test script using the RtAudio matlab class.
 %
 % by Gary Scavone, McGill University, 2018-2022.
 
 clear all;
-apis = RtAudio.getAudioApis(0, 0);
-nApi = 1;
+apis = RtAudio.getAudioApis( 0, 0 );
+if isempty( apis )
+  disp('No audio support found!');
+  return;
+end
+nApi = 1;  % API selection index
 if length(apis) < nApi
   disp('!!API specification problem!!');
   return;
 end
 rth = RtAudio( char(apis(nApi)) );
-rth.listDevices( true );
+%rth.listDevices( true ); % list all input and output devices found
 
 % Basic stream settings
 sampleRate = 48000;
-oChannels = 0;
-iChannels = 2;
+oChannels = 1;
+iChannels = 1;
 oDuration = 2.0;  % seconds (may change depending on other parameters)
 nRepetitions = 2; % repetitions of the output signal (after first time)
 iDuration = 4.0;
 iDevice = 1; % first device = 1 (valid devices meeting requirements)
-oDevice = 2; % first device = 1 (valid devices meeting requirements)
+oDevice = 1; % first device = 1 (valid devices meeting requirements)
 
-% Check that device values are valid
-ids = rth.getAudioDeviceIds( 0, iChannels );
-if length(ids) < iDevice
-  disp('!!Input device specification problem!!');
-  return;
+% Print available devices with oChannels and iChannels and check that
+% device indices are valid
+iDeviceID = 0; oDeviceID = 0;
+if iChannels > 0
+  ids = rth.getAudioDeviceIds( 0, iChannels );
+  if isempty( ids )
+    disp('No input devices found for specified number of channels!');
+    return;
+  end
+  for n = 1:length( ids )
+    if n == 1
+      list = sprintf( 'Input Devices: \n' );
+    end
+    name = rth.getAudioDeviceName(ids( n ));
+    if n == iDevice, name = [name, ' (*selected*)']; end
+    name = sprintf( '\t%d: %s\n', n, name );
+    list = [list name];
+  end
+  fprintf( '%s', list );
+  if length(ids) < iDevice
+    disp('!!Input device specification problem!!');
+    return;
+  end
+  iDeviceID = ids( iDevice );
 end
-iDeviceID = ids( iDevice );
-ids = rth.getAudioDeviceIds( oChannels, 0 );
-if length(ids) < oDevice
-  disp('!!Output device specification problem!!');
-  return;
+if oChannels > 0
+  ids = rth.getAudioDeviceIds( oChannels, 0 );
+  if isempty( ids )
+    disp('No output devices found for specified number of channels!');
+    return;
+  end
+  for n = 1:length( ids )
+    if n == 1
+      list = sprintf( 'Output Devices: \n' );
+    end
+    name = rth.getAudioDeviceName(ids( n ));
+    if n == oDevice, name = [name, ' (*selected*)']; end
+    name = sprintf( '\t%d: %s\n', n, name );
+    list = [list name];
+  end
+  fprintf( '%s', list );
+  if length(ids) < oDevice
+    disp('!!Output device specification problem!!');
+    return;
+  end
+  oDeviceID = ids( oDevice );
 end
-oDeviceID = ids( oDevice );
 
 % Trigger settings (when iChannels > 0)
 triggerThreshold = 0.0; % if this > 0, plotting will be blocked until trigger
@@ -51,7 +89,7 @@ if oChannels
   zeroPadFrames = 0; % extra frames added to end of output signal
   doSine = 1; % 1 = sine wave, otherwise use noise
   if doSine
-    oFrequency = 220;
+    oFrequency = 440;
     P = round( sampleRate / oFrequency ); % integer period in samples
     sourceFrames = P * round( sourceFrames / P );
     source = zeros( oChannels, sourceFrames+zeroPadFrames );
