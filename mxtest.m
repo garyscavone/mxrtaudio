@@ -1,4 +1,4 @@
-% Test script using the RtAudio matlab class.
+r% Test script using the RtAudio matlab class.
 %
 % by Gary Scavone, McGill University, 2018-2022.
 

@@ -18,16 +18,22 @@ classdef RtAudio < handle
 
     %-----------------------------------------------------------
     function apis = getAudioApis( nOutputs, nInputs )
-      apis = mxGetAudioApis( nOutputs, nInputs, 0 );
+      apis = '';
+      if exist( 'mxGetAudioApis.mexmaci64', 'file' )
+        apis = mxGetAudioApis( nOutputs, nInputs, 0 );
+      else
+        error( 'RtAudio: mxGetAudioApis mex function not found!' );
+      end
     end
 
-  end
+  end % static methods
   
   methods
   
     %-----------------------------------------------------------
     function obj = RtAudio( api )
       if exist( 'mxGetAudioDeviceCount', 'file' ) ...
+          && exist( 'mxGetAudioApis', 'file' ) ...
           && exist( 'mxGetAudioDeviceName', 'file' ) ...
           && exist( 'mxGetAudioDeviceInfo', 'file' ) ...
           && exist( 'mxGetAudioDeviceIds', 'file' ) ...
@@ -36,11 +42,18 @@ classdef RtAudio < handle
       else
         error( 'RtAudio: Some or all mex functions not found!' );
       end
-      if nargin > 0
+      % Check that we have compiled APIs
+      apis = obj.getAudioApis(0, 0);
+      if isempty( apis )
+        error( 'RtAudio: No compiled audio APIs found!' );
+      end
+      if nargin == 0
+        % If no api specified, use the first one compiled
+        obj.api_ = char( apis( 1 ) );
+      else
         if ischar( api )
-          apis = obj.getAudioApis(0, 0);
           if any( strcmp( apis, api ))
-            obj.api_ = api;
+            obj.api_ = char( api );
           else
             error( 'RtAudio: Api input argument is invalid!' );
           end
@@ -90,6 +103,7 @@ classdef RtAudio < handle
     %-----------------------------------------------------------
     function count = getAudioDeviceCount( obj, nOutputs, nInputs, api )
       if nargin < 4, api = obj.api_; end
+      if nargin < 3, nInputs = 0; end
       count = 0;
       try
         count = mxGetAudioDeviceCount( nOutputs, nInputs, 0, api );
