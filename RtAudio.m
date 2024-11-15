@@ -19,7 +19,7 @@ classdef RtAudio < handle
     %-----------------------------------------------------------
     function apis = getAudioApis( nOutputs, nInputs )
       apis = '';
-      if exist( 'mxGetAudioApis.mexmaci64', 'file' )
+      if exist( ['mxGetAudioApis.' mexext], 'file' )
         apis = mxGetAudioApis( nOutputs, nInputs, 0 );
       else
         error( 'RtAudio: mxGetAudioApis mex function not found!' );
